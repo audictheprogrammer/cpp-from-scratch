@@ -12,6 +12,7 @@ been verified leak-free with `valgrind`.
 | Project | Reimplements | Key concepts |
 |---|---|---|
 | [`myvector/`](./myvector) | `std::vector<T>` | Rule of five, move semantics, iterators, exception safety |
+| [`myuniqueptr/`](./myuniqueptr) | `std::unique_ptr<T>` | RAII, deleted copy, move-only ownership, `explicit` |
 
 More projects to come.
 
