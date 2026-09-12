@@ -72,9 +72,9 @@ int main() {
     e = makeVector(7, 8, 9); // move assignment
     printVector("e (after move assignment)", e);
 
-    std::cout << "\n=== 8. operator[] out of bounds (exception handled) ===" << std::endl;
+    std::cout << "\n=== 8. at() out of bounds (exception handled) ===" << std::endl;
     try {
-        std::cout << e[100] << std::endl;
+        std::cout << e.at(100) << std::endl;
     } catch (const std::out_of_range& ex) {
         std::cout << "Exception caught: " << ex.what() << std::endl;
     }
@@ -84,7 +84,7 @@ int main() {
     std::cout << "empty_vec.empty(): " << std::boolalpha << empty_vec.empty() << std::endl;
     std::cout << "empty size: " << empty_vec.size() << std::endl;
     try {
-        std::cout << empty_vec[0] << std::endl;
+        std::cout << empty_vec.at(0) << std::endl;
     } catch (const std::out_of_range& ex) {
         std::cout << "Exception caught: " << ex.what() << std::endl;
     }
@@ -99,17 +99,14 @@ int main() {
     std::cout << "\n=== 11. pop_back ===" << std::endl;
     e = makeVector(7, 8, 9); // move assignment
     printVector("e before pop_back", e);
-    int nine = e.pop_back();
-    std::cout << "e.pop_back() returns 9?: " << nine << std::endl;
-    printVector("e after pop_back", e);
+    e.pop_back();
+    printVector("e after pop_back (last element removed)", e);
 
-    std::cout << "\n=== 12. Empty pop_back (exception handled) ===" << std::endl;
+    std::cout << "\n=== 12. Empty pop_back (precondition, not exception) ===" << std::endl;
     MyVector<int> empty_pop;
-    try {
-        empty_pop.pop_back();
-    } catch (const std::out_of_range& ex) {
-        std::cout << "Exception caught: " << ex.what() << std::endl;
-    }
+    std::cout << "empty_pop.size() before pop_back attempt: " << empty_pop.size()
+              << " (skipping actual call: pop_back() on empty vector is UB by design, like std::vector)"
+              << std::endl;
 
     std::cout << "\n=== 13. Iterators (non-const) ===" << std::endl;
     MyVector<int> h;
@@ -126,20 +123,21 @@ int main() {
     std::cout << "\n=== 14. Const iterators + const operator[] ===" << std::endl;
     printConstVector("h (via const iterator)", h);
 
+    std::cout << "\n=== 15. reserve() ===" << std::endl;
+    MyVector<int> r;
+    r.reserve(50);
+    std::cout << "r.size() after reserve(50): " << r.size()
+              << ", r.capacity(): " << r.capacity() << std::endl;
+    r.push_back(1);
+    r.push_back(2);
+    std::cout << "r.capacity() should stay 50 (no reallocation triggered): "
+              << r.capacity() << std::endl;
+
     std::cout << "\nAll tests passed if no crash occurred." << std::endl;
     return 0;
-    
-    /* 
-    $ valgrind --leak-check=full ./myvector
-    >>> All tests passed if no crash occurred.
-    >>> ==2133== 
-    >>> ==2133== HEAP SUMMARY:
-    >>> ==2133==     in use at exit: 0 bytes in 0 blocks
-    >>> ==2133==   total heap usage: 43 allocs, 43 frees, 74,925 bytes allocated
-    >>> ==2133== 
-    >>> ==2133== All heap blocks were freed -- no leaks are possible
-    >>> ==2133== 
-    >>> ==2133== For lists of detected and suppressed errors, rerun with: -s
-    >>> ==2133== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+
+    /*
+    $ valgrind --leak-check=full ./test
+    (expected: 0 errors, all heap blocks freed)
     */
 }

@@ -1,134 +1,191 @@
+#pragma once
+
 #include <iostream>
+#include <memory>
+#include <cassert>
+#include <stdexcept>
+
 
 template <typename T>
 class MyVector {
-    
+private:
+    std::allocator<T> m_alloc;
+    T*     m_data;
+    size_t m_capacity;
+    size_t m_size;
+
 public:
-    // Default constructor.
-    MyVector() : m_data(nullptr), m_size(0), m_capacity(0) {}
+    /* Default constructor: creates an empty vector with no allocation. */
+    MyVector() : m_data(nullptr), m_capacity(0), m_size(0) {}
 
-    // Copy constructor.
-    MyVector(const MyVector<T>& v) {
-        m_data = new T[v.m_capacity];
-        for (size_t i = 0; i < v.m_size; i++) {
-            m_data[i] = v.m_data[i];
+    /* Copy constructor: deep-copies all elements from other. */
+    MyVector(const MyVector<T>& other)
+        : m_data(other.m_capacity? m_alloc.allocate(other.m_capacity): nullptr), m_capacity(other.m_capacity), m_size(0) {
+        for (size_t i = 0; i < other.m_size; i++) {
+            std::allocator_traits<decltype(m_alloc)>::construct(
+                m_alloc,
+                m_data + i,
+                other.m_data[i]
+            );
+            m_size++;
         }
-        m_size = v.m_size;
-        m_capacity = v.m_capacity;
     }
 
-    // Move constructor.
-    MyVector(MyVector<T>&& v) {
-        m_data = v.m_data;
-        m_size = v.m_size;
-        m_capacity = v.m_capacity;
-
-        v.m_data = nullptr;
-        v.m_size = 0;
-        v.m_capacity = 0;
+    /* Move constructor: steals other's buffer, leaving it empty. */
+    MyVector(MyVector<T>&& other) noexcept: m_data(other.m_data), m_capacity(other.m_capacity), m_size(other.m_size) {
+        other.m_data = nullptr;
+        other.m_capacity = 0;
+        other.m_size = 0;
     }
 
-    // Copy operator.
-    MyVector<T>& operator=(const MyVector<T>& v) {
-        if (this == &v) {
-            return *this;
+    /* Copy operator: releases current storage, then deep-copies other. */
+    MyVector<T>& operator=(const MyVector<T>& other) {
+        if (this == &other) return *this;
+        if (m_capacity) {
+            (*this).clear();
+            m_alloc.deallocate(m_data, m_capacity);
+            m_capacity = 0;
+            m_size = 0;
         }
-        delete[] m_data; // delete[] applied on nullptr make no-op.
-        m_data = new T[v.m_capacity];
-        for (size_t i = 0; i < v.m_size; i++) {
-            m_data[i] = v.m_data[i];
+
+        m_capacity = other.m_capacity;
+        m_data = m_alloc.allocate(m_capacity);
+        for (size_t i = 0; i < other.m_size; i++) {
+            std::allocator_traits<decltype(m_alloc)>::construct(
+                m_alloc,
+                m_data + i,
+                other.m_data[i]
+            );
+            m_size++;
         }
-        m_size = v.m_size;
-        m_capacity = v.m_capacity;
 
         return *this;
     }
 
-    // Move operator.
-    MyVector& operator=(MyVector<T>&& v) {
-        if (this == &v) {
-            return *this;
+    /* Move operator: releases current storage, then steals other's buffer. */
+    MyVector<T>& operator=(MyVector<T>&& other) noexcept{
+        if (this == &other) return *this;
+        if (m_capacity) {
+            clear();
+            m_alloc.deallocate(m_data, m_capacity);
+            m_capacity = 0;
         }
-        delete[] m_data;
-        m_data = v.m_data;
-        m_size = v.m_size;
-        m_capacity = v.m_capacity;
+
+        m_capacity = other.m_capacity;
+        other.m_capacity = 0;
+
+        m_data = other.m_data;
+        other.m_data = nullptr;
+
+        m_size = other.m_size;
+        other.m_size = 0;
+
+        return *this;
+    }
+
+    /* Destructor: destroys all constructed elements and releases storage. */
+    ~MyVector() {
+        // Destroy elements from the vector.
+        clear();
+        // Deallocate.
+        if (m_data != nullptr) {
+            m_alloc.deallocate(m_data, m_capacity);
+        }
+    }   
+
+    /* Grows capacity to at least new_capacity, preserving existing elements.
+       No-op if new_capacity <= capacity(). */
+    void reserve(size_t new_capacity) {
+        if (new_capacity <= m_capacity) {return ; }
+
+        T* new_data = m_alloc.allocate(new_capacity);
+
+        for (size_t i = 0; i < m_size; i++) {
+            std::allocator_traits<decltype(m_alloc)>::construct(
+                m_alloc,
+                new_data + i,
+                m_data[i]
+            );
+            std::allocator_traits<decltype(m_alloc)>::destroy(
+                m_alloc,
+                m_data + i
+            );
+        }
         
-        v.m_data = nullptr;
-        v.m_size = 0;
-        v.m_capacity = 0;
-        return *this;
+        m_alloc.deallocate(m_data, m_capacity);
+        m_data = new_data;
+        m_capacity = new_capacity;
     }
 
-    // Destructor.
-    ~MyVector() { delete[] m_data; }
+    /* Appends a copy of value at the end, doubling capacity if full. */
+    void push_back(const T& value) {
+        // Step 1: Increase capacity if the vector is full.
+        if (m_capacity == m_size) {
+            size_t new_capacity = (m_capacity == 0)? 1: 2 * m_capacity;
+            reserve(new_capacity);
+        }
 
-    // Getter empty(): true if the vector contains no element.
+        // Step 2: Adding new elements to the vector.
+        std::allocator_traits<decltype(m_alloc)>::construct(
+            m_alloc,
+            m_data + m_size++,
+            value
+        );
+    }
+
     bool empty() const { return m_size == 0; }
-
-    // Getter size().
     size_t size() const { return m_size; }
-
-    // Getter capacity().
     size_t capacity() const { return m_capacity; }
 
-    // Method push_back(): add an element at the end, reallocating if needed.
-    void push_back(const T& value) {
-        if (m_size == m_capacity) {
-            // Increase capacity by +1 or by *2.
-            m_capacity == 0 ? m_capacity++ : m_capacity*=2;
-
-            // Allocate new dynamic array and copy.
-            T* new_data = new T[m_capacity];
-            for (size_t i = 0; i < m_size; i++) {
-                new_data[i] = m_data[i];
-            }
-            // Delete previous array and make it point to the new one.
-            delete[] m_data;
-            m_data = new_data;
-        }
-
-        m_data[m_size++] = value;
-
+    /* Non-const data access operator. */
+    T& operator[](size_t i) {
+        assert(i < m_size);
+        return m_data[i];
+    }
+    /* Const data access operator. */
+    const T& operator[](size_t i) const {
+        assert(i < m_size);
+        return m_data[i];
     }
 
-    // Method pop_back(): remove and return the last element.
-    T pop_back() {
-        if (m_size == 0) {
-            throw std::out_of_range("cannot pop, vector is empty.");
-        }
-        T res = m_data[--m_size];
-        return res;
-    }
-
-    // Access operator.
-    T& operator[](size_t index) {
-        if (index >= m_size) {
+    T& at(size_t i) {
+        if (i >= m_size) {
             throw std::out_of_range("index out of bounds");
         }
-        return m_data[index];
+        return m_data[i];
     }
-    // Const access operator.
-    const T& operator[](size_t index) const {
-        if (index >= m_size) {
+    const T& at(size_t i) const {
+        if (i >= m_size) {
             throw std::out_of_range("index out of bounds");
         }
-        return m_data[index];
+        return m_data[i];
     }
 
+    /* Iterators (contiguous storage, so a raw pointer suffices). */
 
-    // Iterators.
     T* begin() { return m_data; }
     T* end() { return m_data + m_size; }
-
-    // Const iterators.
     const T* begin() const { return m_data; }
     const T* end() const { return m_data + m_size; }
 
+    /* Destroys all elements, keeping allocated capacity. */
+    void clear() {
+        while (m_size > 0) {
+            m_size--;
+            std::allocator_traits<decltype(m_alloc)>::destroy(
+                m_alloc,
+                m_data + m_size
+            );
+        }
+    }
 
-private:
-    T* m_data;
-    size_t m_size;
-    size_t m_capacity;
+    /* Removes the last element. Undefined behavior if the vector is empty. */
+    void pop_back() {
+        assert(m_size > 0);
+        std::allocator_traits<decltype(m_alloc)>::destroy(
+            m_alloc,
+            m_data + --m_size
+        );
+    }
 
 };
